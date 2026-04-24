@@ -269,9 +269,25 @@ pass background info that refines the answer.
 
 ### Signals — `signals`
 
-High-score market event feed (news + filings + alerts). Pre-filtered to
-`score >= 3.0`. Public surface returns 5 columns; internal scoring is
-not exposed.
+A curated investment-event feed. Each signal is **one market event**
+(one SUBJECT × one ACTION × one TIME), already aggregated across
+outlets — you get one record per event, not one per article.
+
+**Coverage** — sources rolled into the feed:
+
+- News & wires: Finnhub, NewsAPI, GDELT, FMP, Bloomberg, Reuters,
+  WSJ, FT, CNBC
+- Filings: SEC 8-K, 13D/G, 6-K (foreign issuers), structured 8-K
+  earnings data, earnings-call summaries
+- Corporate disclosure: press releases
+- Macro & policy: Fed / FOMC / BOJ / ECB / SEC / White House /
+  Truth Social
+- Market microstructure: analyst ratings, insider trading, intraday
+  price movers
+- Social: select financial subreddits
+
+**Freshness**: signals appear within ~3–5 minutes of the originating
+event.
 
 | Channel | Call                                                                         |
 | ------- | ---------------------------------------------------------------------------- |
@@ -283,7 +299,21 @@ Response shape: `{ headline, summary, suggested_tickers[], sector[], created_at 
 
 ### Articles — `article_list` / `article_get`
 
-Published research articles with topic and reference metadata.
+Research articles spanning company-specific analysis, event coverage,
+and industry trackers.
+
+**What you'll find**:
+
+- **Company & thesis** — focused single-name or small-group analysis
+  (1–3 tickers), peer comparisons, annual ticker theses, SEC-filing
+  follow-ups
+- **Event coverage** — postmortems on what just happened, watch-pieces
+  on pending events (policy decisions, upcoming earnings, lawsuits),
+  follow-up checkpoints on previously covered events, macro-event
+  analysis
+- **Industry & sector** — thematic industry pieces (≥5 names),
+  recurring sector trackers
+
 
 | Channel | Call                                                                     |
 | ------- | ------------------------------------------------------------------------ |
