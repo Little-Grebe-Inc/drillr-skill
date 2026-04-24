@@ -218,8 +218,8 @@ operate by natural names (e.g. watchlist by name); REST uses UUIDs.
 ### Research & data lookup — `search`
 
 Ask natural-language questions about companies, tickers, sectors,
-filings, earnings. Runs 5-15s server-side and returns a synthesized
-answer with source attribution.
+filings, earnings. Runs 5-15s server-side and returns markdown text
+with source references.
 
 | Channel | Call                                                            |
 | ------- | --------------------------------------------------------------- |
@@ -228,7 +228,39 @@ answer with source attribution.
 | CLI     | `drillr search "<question>"`                                    |
 
 **Session continuity:** pass the returned `session_id` in the next
-call to continue the same research conversation.
+call to continue the same research conversation. Use `context` to
+pass background info that refines the answer.
+
+**Data coverage:**
+- **Market data** — real-time quotes, historical OHLCV, index prices
+  & composition (S&P 500, Dow, NASDAQ 100)
+- **Fundamentals** — income / balance / cash flow statements
+  (quarterly & annual), valuation ratios, company snapshots
+- **Earnings** — call transcripts with AI summaries, calendar with
+  EPS/revenue estimates vs actuals
+- **Analyst research** — ratings & price targets (~550K events from
+  500+ firms), consensus rollups
+- **SEC filings** — semantic search across 10-K, 10-Q, 8-K, 20-F,
+  6-K, S-1, F-1
+- **Corporate events** — M&A, debt issuance, securities offerings
+- **People & governance** — executive profiles, compensation,
+  appointments & departures
+- **Ownership** — insider trades (Form 3/4/5), institutional
+  holdings (13F-HR, 13D/G)
+- **News** — aggregated financial news with importance scoring
+- **Company discovery** — by industry, product, technology, business
+  model, supply chain
+- **Alternative data** — energy, data centers, semiconductors,
+  compute & inference pricing, AI model development, platform
+  adoption, sentiment, macro & trade, patents
+
+**When to use `search`:**
+- Stock prices, company financials, market data
+- SEC filing content (risk factors, revenue breakdown, MD&A)
+- Earnings summaries or analyst consensus
+- Insider trading or institutional ownership
+- Alternative data (AI value chain, energy, semiconductors)
+- Compare companies or sectors
 
 **Example questions that work well:**
 - "What is AAPL's current PE ratio, and how does it compare to MSFT?"
