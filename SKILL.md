@@ -4,6 +4,7 @@ description: Access Drillr's financial research capabilities — agentic search 
 version: 1.0.0
 license: MIT
 homepage: https://drillr.ai
+repository: https://github.com/Little-Grebe-Inc/drillr-skill
 metadata:
   openclaw:
     homepage: https://drillr.ai

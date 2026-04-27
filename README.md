@@ -29,11 +29,29 @@ fields required by the [clawhub skill format](https://clawhub.ai).
 Install via your clawhub client, or clone into your OpenClaw skills
 directory.
 
+### Hermes Agent
+
+```bash
+git clone https://github.com/Little-Grebe-Inc/drillr-skill ~/.hermes/skills/drillr
+```
+
+Or, to make it discoverable to anyone who has Hermes:
+
+```bash
+hermes skills tap add Little-Grebe-Inc/drillr-skill
+```
+
+Restart Hermes — the skill will appear in `/skills browse` and
+auto-register as a slash command.
+
 ### Other agent runtimes
 
 The skill is a single `SKILL.md` with YAML frontmatter and Markdown
 body — no executables, no helper scripts, no MCP bundle required.
-Any runtime that can read `SKILL.md` files should work.
+Any runtime that can read [Agent Skills](https://agentskills.io)
+files should work; the install path is typically the runtime's
+`skills/` directory (e.g. `~/.claude/skills/`, `~/.hermes/skills/`,
+`~/.config/<runtime>/skills/`).
 
 ## What's inside
 
