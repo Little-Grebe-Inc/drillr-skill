@@ -22,6 +22,20 @@ Restart Claude Code. The skill auto-loads based on the `description`
 field in `SKILL.md`, so Claude will invoke it when the user asks
 about stocks, earnings, signals, etc.
 
+### Smithery (one-line install for any Smithery-compatible client)
+
+```bash
+npx -y @smithery/cli install drillr/drillr --client claude
+```
+
+Wires Drillr's MCP server into your client via Smithery's gateway —
+authorization goes through Drillr OAuth, no API key paste required.
+
+Browse the listings:
+
+- MCP server: <https://smithery.ai/servers/drillr/drillr>
+- Skill: <https://smithery.ai/skills/drillr/drillr>
+
 ### Clawhub / OpenClaw
 
 The frontmatter in `SKILL.md` includes the `metadata.openclaw.*`
