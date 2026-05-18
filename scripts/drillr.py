@@ -208,7 +208,9 @@ def main() -> None:
         prog="drillr",
         description="drillr REST dispatcher (skill v2)",
     )
-    sub = parser.add_subparsers(dest="cmd", required=True)
+    # required=True needs Python 3.7+; emulate it for 3.6 (default on
+    # older Linux distros — Alibaba Cloud 8, CentOS 7, etc.).
+    sub = parser.add_subparsers(dest="cmd")
 
     sp = sub.add_parser("setup-key", help="store drl_* key in ~/.drillr/config.json")
     sp.add_argument("key", help="the drl_... key from drillr.ai/developer/keys")
@@ -224,6 +226,9 @@ def main() -> None:
     sp.set_defaults(func=cmd_call)
 
     args = parser.parse_args()
+    if not getattr(args, "func", None):
+        parser.print_help(sys.stderr)
+        sys.exit(1)
     args.func(args)
 
 
