@@ -37,13 +37,17 @@ Quote filing paragraphs with citation.
 
 User: *"How does AMD stack up against NVDA on margins and growth?"*
 
-1. `run_sql` once with `WHERE ticker IN ('AMD','NVDA')` on
-   `profitability_ratios` for last 4-8 quarters
-2. `run_sql` for `growth_metrics` similarly
-3. `sec_report_search` for each: `query: "competitive positioning"`,
-   pick the most recent 10-Q each
+1. `sec_report_search` per ticker for the metrics requested (e.g.
+   `query: "gross margin operating margin"`) — for standardized
+   financials this is usually the most reliable path; the SQL
+   catalog may not surface fundamentals.
+2. If `list_tables` does surface a fundamentals table, use the SQL
+   three-piece flow (`list_tables` → `get_table_schema` → `run_sql`)
+   to pull a longer time series in one shot.
+3. `sec_report_search` again for `query: "competitive positioning"`
+   on each ticker's most recent 10-Q for qualitative color.
 4. Format as side-by-side table; flag deltas > 200 bps or > 10% growth
-   diff as "notable"
+   diff as "notable".
 
 **Pitfall:** if the two tickers have different fiscal calendars (NVDA
 ends Jan, most peers end Dec), call `fiscal_utility` first so you're
@@ -77,8 +81,11 @@ this week?"*
 
 1. **Discover candidates** — `company_search` with the theme as
    natural-language query
-2. **Filter** — `run_sql` on `company_profile` if you need to apply
-   structured filters (country, market cap, listing exchange)
+2. **Filter** — if `company_search` results need further structured
+   filtering (country, market cap, listing exchange), discover a
+   company-metadata table via `list_tables` and use the SQL
+   three-piece flow. Skip this step if `company_search` already
+   returned what you need.
 3. **Activity scan** — `signal_list` with the candidate tickers as
    `tickers` filter (chunk into batches of ≤ 20)
 4. **Highlight** — top 5 signals by score; for each, one-sentence
@@ -111,8 +118,11 @@ User: *"Run my morning brief on AAPL, MSFT, NVDA, GOOGL."*
 2. For each ticker with ≥1 score-3+ signal, pull one-line context with
    a follow-up `sec_report_search` only if the signal references a
    filing
-3. `run_sql` for a 1-line price + change snapshot per ticker (yesterday
-   close vs prior close from `price_volume_history`)
+3. For a 1-line price + change snapshot per ticker: discover the
+   price table via `list_tables` (only once per session — cache the
+   name), then `run_sql` projecting close + the date column ordered
+   DESC LIMIT 2 per ticker. (Don't hard-code the table name; the
+   SQL schema is dynamic.)
 4. Format: per-ticker block of 3 lines:
    - Headline price action
    - Top signal (if any)
@@ -138,9 +148,12 @@ they know provenance.
 
 ## Anti-patterns
 
-- **Don't `SELECT *`** from large fact tables — projects columns
-  explicitly. Wide selects on `price_volume_history` /
-  `insider_trades` can time out.
+- **Don't `SELECT *`** from large fact tables — project columns
+  explicitly. Wide selects on time-series / event fact tables can
+  time out and burn your context budget.
+- **Don't hard-code SQL table names** from memory or from this
+  file. The catalog is dynamic — always discover via `list_tables`
+  + `get_table_schema` (see `references/sql_schemas.md`).
 - **Don't make N+1 calls** when one query with `WHERE ticker IN (...)`
   works.
 - **Don't paste raw JSON** to the user. Reshape into prose, tables, or

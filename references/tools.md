@@ -19,19 +19,22 @@ REST mirror: every tool maps 1:1 to `POST|GET https://gateway.drillr.ai/api/v1/d
 
 ---
 
-## `run_sql` — Standardized financial SQL (POST)
+## `run_sql` — Read-only SQL over the live catalog (POST)
 
-Execute a read-only `SELECT` against the standardized data layer.
+Execute a `SELECT` against drillr's dynamic SQL layer. **You must
+discover the table + columns first** via `list_tables` /
+`get_table_schema` — names are not stable and there is no built-in
+catalog (see `references/sql_schemas.md`).
 
 **Body:**
 
 ```json
-{ "sql": "SELECT ticker, period_end, gross_margin FROM income_statement WHERE ticker='AAPL' AND fiscal_period='Q' ORDER BY period_end DESC LIMIT 4" }
+{ "sql": "SELECT <projected_cols> FROM <table_from_list_tables> WHERE ticker='<TICKER>' ORDER BY <date_col> DESC LIMIT N" }
 ```
 
-| Field | Required | Notes                                              |
-| ----- | -------- | -------------------------------------------------- |
-| `sql` | yes      | Non-empty `SELECT`. Anything else returns `400`.   |
+| Field | Required | Notes                                                    |
+| ----- | -------- | -------------------------------------------------------- |
+| `sql` | yes      | Non-empty `SELECT`. Anything else returns `400`.         |
 
 **Response shape:**
 
@@ -44,11 +47,12 @@ Execute a read-only `SELECT` against the standardized data layer.
 
 **Tips:**
 
-- Use single-quote escaping inside JSON: `\"ticker='AAPL'\"`.
-- Discover tables with `list_tables` and `get_table_schema` before
-  writing SQL — table names change as the catalog evolves.
-- The query budget per call is bounded; very wide `SELECT *` over many
-  rows may time out. Project columns explicitly.
+- Use backslash-escaped single quotes inside JSON for SQL string
+  literals: `"WHERE ticker='AAPL'"`.
+- **Never write SQL against a table name you haven't verified** —
+  see `references/sql_schemas.md` for the discovery workflow.
+- Project columns explicitly; `SELECT *` against wide tables can
+  time out and chews context.
 
 ---
 
@@ -174,7 +178,7 @@ etc.), use `get_table_schema` directly — they're not surfaced via
 
 | Param        | Required | Notes                                       |
 | ------------ | -------- | ------------------------------------------- |
-| `table_name` | yes      | Exact table name as returned by `list_tables`, or a known standardized table (e.g. `income_statement`, `valuation_ratios`, `price_volume_history`) |
+| `table_name` | yes      | Exact table name as returned by `list_tables`. Do not invent names — see `references/sql_schemas.md`. |
 
 **Response:** `{ data: { table, columns: [{ column_name, data_type, comment }] } }`.
 

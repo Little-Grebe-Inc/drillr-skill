@@ -1,121 +1,124 @@
-# Drillr SQL Schemas — Discovery Guide
+# Drillr SQL Layer — Discovery Guide
 
-Drillr's `run_sql` exposes a curated set of tables. **The available
-table list evolves**, and there is no public catalog mapping
-"financial statement type" → "table name". Do not hard-code table
-names from memory — discover them at runtime.
+Drillr's `run_sql` + `list_tables` + `get_table_schema` are a **dynamic
+three-piece toolkit**: the agent is expected to discover the available
+schema at runtime, not memorize a catalog. This file teaches the
+discovery workflow and SQL constraints — **deliberately no specific
+table or column names are listed**, because the live schema evolves
+and any names baked into this file would rot.
 
-This file is loaded only when you need to write `run_sql`. For tool
-syntax, see `references/tools.md`.
+This file is loaded only when you're about to write `run_sql`. For
+tool-call syntax, see `references/tools.md`.
 
 ---
 
-## Golden rule — discover, don't guess
+## Golden rule
 
-Before writing any `run_sql`:
+**Discover, don't guess.** Never invent a table name from memory.
+Always:
 
-1. Use `list_tables` to enumerate alt-data tables in a category, OR
-   try `get_table_schema --query "table_name=<candidate>"` for tables
-   you already know by name (only `price_volume_history` is reliably
-   present today).
-2. **If `get_table_schema` returns `columns: []` (empty array), treat
-   the table as non-existent.** This is the current gateway behavior
-   for unknown tables — it returns 200 with empty columns instead of
-   404. Move on; don't try `run_sql` against it.
-3. If a `run_sql` query returns `400 invalid_request "relation \"X\"
-   does not exist"`, the table is gone or never existed. Don't retry
-   with variants like `<name>_v2` or `financial_<name>` — those are
-   guesses. Switch strategy (see fallback below).
+1. `list_tables` to enumerate what's available (by category).
+2. `get_table_schema` on a candidate to learn its columns + types.
+3. `run_sql` once you've confirmed the table exists and you know
+   the column names you need.
 
-## When numeric financials aren't in SQL — use SEC filing text
+If you skip step 1 or step 2, you'll burn turns chasing
+`relation "<x>" does not exist` errors.
 
-If the user asks for standardized financials (income statement, gross
-margin, EPS, balance-sheet items) and you can't find a table for it
-via `list_tables` + `get_table_schema`, **switch to
-`sec_report_search`**:
+---
+
+## Discovery workflow
 
 ```bash
-python scripts/drillr.py call sec_report_search \
-  --json '{"ticker":"AAPL","query":"gross margin and operating margin","top_k":5}'
+# 1. enumerate tables in one or more categories
+python <skill_dir>/scripts/drillr.py call list_tables \
+  --query "categories=<Category1>,<Category2>"
+# → response: data[].tables[].{name, summary}
+#   pick the table that matches what you need
+
+# 2. confirm the table exists + see real columns
+python <skill_dir>/scripts/drillr.py call get_table_schema \
+  --query "table_name=<the_one_you_picked>"
+# → response: data.columns[].{column_name, data_type, comment}
+# ⚠️  if columns is [] (empty array), treat the table as NOT existing.
+#    Today the gateway returns 200 with empty columns instead of 404
+#    for unknown tables. Don't proceed to run_sql.
+
+# 3. query
+python <skill_dir>/scripts/drillr.py call run_sql \
+  --json '{"sql":"SELECT col1, col2 FROM <table> WHERE ticker=... LIMIT N"}'
+```
+
+If `list_tables` returns no useful candidates, or the category
+you'd need doesn't exist, the data may not be in the SQL layer
+at all. Move to the **fallback strategy** below.
+
+---
+
+## When SQL doesn't have what the user asked for
+
+The SQL layer's coverage evolves. If a metric the user wants isn't
+discoverable via `list_tables` (or the candidate table you find has
+`columns: []`), **don't keep guessing variant names**. Switch to
+`sec_report_search` and extract the figure from the latest 10-Q /
+10-K filing text:
+
+```bash
+python <skill_dir>/scripts/drillr.py call sec_report_search \
+  --json '{"ticker":"<TICKER>","query":"<metric described in plain english>","top_k":5}'
 ```
 
 10-Q / 10-K filings contain the structured financial tables as
-embedded text and tables. Vector search returns paragraph-level
-snippets with citation metadata; extract the numbers from there and
-quote the filing period + form type in your answer.
+text. Vector search returns paragraph-level snippets with citation
+metadata; pull the numbers from the matched text and cite the form
+type + fiscal period in your final answer.
 
-This is the **canonical path** for standardized fundamentals when
-SQL coverage is incomplete. Don't apologize for it — it's how drillr
-sources the same data the SQL layer would, just via the filing
-upstream.
-
-## What is reliably in SQL today
-
-### `price_volume_history` — OHLCV
-
-Confirmed columns (via `get_table_schema`):
-
-- `id` (text), `ticker` (text), `period_end` (date),
-  `time_frame` (text — `daily` / `weekly` / `monthly`),
-  `open`, `high`, `low`, `close`, `volume` (numeric)
-
-Always project columns explicitly; never `SELECT *` over the full
-table.
-
-### Alt-data tables — discoverable via `list_tables`
-
-Categories include (non-exhaustive): `Twitter`, `Reddit`,
-`AI Models`, `AI Companies`, `AI Benchmarks`, `LLM Token Pricing`,
-`Compute`, `Energy and Power`, `Data Centers`, `Semiconductors`,
-`Macro and Trade`, `Critical Minerals`, `Prediction Markets`.
-
-Workflow:
-
-```bash
-python scripts/drillr.py call list_tables --query "categories=AI%20Models"
-# → response lists {name, summary} for each table in the category
-python scripts/drillr.py call get_table_schema --query "table_name=<chosen>"
-# → check it returns non-empty columns before writing SQL
-python scripts/drillr.py call run_sql --json '{"sql":"SELECT ... FROM <chosen> WHERE ..."}'
-```
+---
 
 ## SQL hard rules
 
-- **`SELECT` only.** `INSERT` / `UPDATE` / `DROP` / DDL / any other
-  statement returns `400 invalid_request`.
-- **No `information_schema` / `pg_*`.** The gateway blocks system
-  catalog access with `400 invalid_request "Access to
-  information_schema / pg_* system catalogs is not allowed"`. Do not
-  try to query metadata that way; use `list_tables` /
-  `get_table_schema` instead.
-- **No multi-statement queries.**
-- **Joins, CTEs, window functions, aggregation** all supported.
-- **Currency is USD** unless the table has an explicit `currency` column.
+These are gateway-enforced — don't waste a call probing them:
 
-## Quick recipes — only for tables you've verified exist
+- **`SELECT` only.** `INSERT` / `UPDATE` / `DROP` / DDL return
+  `400 invalid_request`.
+- **No `information_schema` / `pg_*`.** System-catalog access is
+  blocked with `400 invalid_request "Access to information_schema /
+  pg_* system catalogs is not allowed"`. Use `list_tables` /
+  `get_table_schema` instead — that's the supported discovery path.
+- **No multi-statement queries.** One statement per call.
+- **Joins, CTEs, window functions, aggregates** all supported.
+- **Currency is USD** unless the column you're reading carries an
+  explicit currency code.
 
-### Recent daily closes
+---
 
-```sql
-SELECT period_end, close, volume
-FROM price_volume_history
-WHERE ticker='AAPL' AND time_frame='daily'
-ORDER BY period_end DESC LIMIT 30
-```
+## Practical SQL hygiene
 
-### Two-ticker price comparison
+- **Project columns explicitly** — never `SELECT *` against a wide
+  fact table. Returned payloads compete with your context budget,
+  and wide selects can time out on large tables.
+- **Filter by `ticker` (uppercase)** — that's the standard primary
+  key for equity-keyed tables.
+- **For time-series tables, filter by the date / timestamp column**
+  to bound the row count. Confirm the exact column name via
+  `get_table_schema`.
+- **One query, not N.** If you need data for 5 tickers, use
+  `WHERE ticker IN ('A','B','C','D','E')`, not 5 separate calls.
 
-```sql
-SELECT ticker, period_end, close
-FROM price_volume_history
-WHERE ticker IN ('AMD','NVDA') AND time_frame='daily'
-  AND period_end >= '2026-01-01'
-ORDER BY ticker, period_end DESC
-```
+---
 
-> The earlier version of this file listed table names like
-> `income_statement`, `profitability_ratios`, `valuation_ratios`,
-> `insider_trades`. **Those names did not work against the live
-> database** in 2026-05 testing. Until this file is updated with
-> verified names, treat SQL as alt-data + prices only, and route
-> fundamentals through `sec_report_search`.
+## Anti-patterns
+
+- ❌ Writing `SELECT ... FROM <table_name_from_memory>` without
+  `get_table_schema` first.
+- ❌ When a query fails with "relation does not exist", retrying
+  with `<name>_v2`, `financial_<name>`, `<name>s`, etc. — those are
+  guesses. If `list_tables` didn't surface the right table,
+  fundamentals are probably not in SQL at all; fall back to
+  `sec_report_search`.
+- ❌ Apologizing to the user about "I don't have direct SQL access
+  to that metric, but…" — just route to `sec_report_search` quietly
+  and deliver the answer. The user wants the number, not the
+  plumbing.
+- ❌ Calling `information_schema.tables` or `pg_catalog.*`. Use
+  `list_tables`.

@@ -141,18 +141,19 @@ A user question is rarely a 1:1 mapping to a tool. Common patterns:
 
 1. If the ticker is implied not explicit ("Apple" / "the chip giant"),
    first `company_search` to resolve.
-2. For **prices / volume / OHLCV**, use `run_sql` against
-   `price_volume_history` (confirmed-present table — see
-   `references/sql_schemas.md` for columns).
+2. For **time-series / numeric data potentially in the SQL layer**
+   (prices, alt-data, anything tabular), use the SQL three-piece flow
+   — `list_tables` → `get_table_schema` → `run_sql`. Do not write
+   SQL against a table name from memory; the catalog is dynamic.
+   See `references/sql_schemas.md`.
 3. For **standardized financials** (income statement, ratios,
-   balance-sheet items, EPS), today the **canonical path is
-   `sec_report_search`**, not `run_sql`. Vector-search the latest
-   10-Q / 10-K for the metric you want, extract the number from the
-   returned paragraph(s), and quote with citation.
-4. If you decide to try a SQL table, **always `get_table_schema`
-   first**, and **treat `columns: []` as the table not existing**
-   (the gateway returns 200 with empty columns instead of 404 for
-   unknown tables — see `references/sql_schemas.md`).
+   balance-sheet items, EPS, margin %): if `list_tables` doesn't
+   surface a relevant table, **route to `sec_report_search`** and
+   extract the number from the latest 10-Q / 10-K paragraph text.
+   This is the canonical fallback — don't apologize for it.
+4. **Treat `get_table_schema` returning `columns: []` as the table
+   not existing** (current gateway behavior: 200 + empty instead of
+   404). Move on; don't `run_sql` against it.
 5. `run_sql` only accepts `SELECT` — the gateway rejects anything else
    with `400 invalid_request`.
 
@@ -196,14 +197,19 @@ September), use `fiscal_utility` before constructing date filters in
 
 ## Common workflows
 
-### Quick lookup (price-class)
+### Quick lookup (price / time-series)
 
 User: *"What's NVDA's last close?"*
 
-1. `run_sql`: `SELECT period_end, close FROM price_volume_history
-   WHERE ticker='NVDA' AND time_frame='daily' ORDER BY period_end
-   DESC LIMIT 1`
-2. Return one number + the as-of date.
+1. `list_tables` to find the table holding daily prices (look for
+   categories / table summaries that mention prices, OHLCV, or
+   market data).
+2. `get_table_schema` on the candidate to learn the column names
+   (the schema is dynamic — don't assume `period_end` / `close` /
+   `time_frame` ahead of time).
+3. `run_sql` projecting just the columns you need, ordered DESC by
+   the date column, `LIMIT 1`.
+4. Return one number + the as-of date.
 
 ### Quick lookup (fundamentals)
 
