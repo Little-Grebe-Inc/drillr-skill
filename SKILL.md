@@ -1,7 +1,7 @@
 ---
 name: drillr
-description: Access Drillr's financial research capabilities — agentic search over company financials, a high-signal market event feed, published analyst articles, and persistent per-user watchlists. Use this whenever the user asks about stock prices, company fundamentals, earnings, SEC filings, market signals, sector trends, or wants to track tickers over time. Requires a user-specific API key obtainable at https://drillr.ai/developer/keys.
-version: 1.0.0
+description: Drillr financial-research data for US and Japan public equities. Provides eight tools — standardized financial statements and ratios via SQL over 90+ tables, paragraph-level SEC filing semantic search (10-K / 10-Q / 20-F / 6-K / S-1 / DEF 14A), company / ticker resolution, a live cross-asset signal feed, fiscal-period utilities, and AI value-chain alt-data. Invoke whenever the user asks about stocks, tickers, financial statements, earnings, SEC filings, insider trading, institutional ownership, market signals, or sector / industry research. Requires a user-specific API key obtainable at https://drillr.ai/developer/keys.
+version: 2.0.0
 license: MIT
 homepage: https://drillr.ai
 repository: https://github.com/Little-Grebe-Inc/drillr-skill
@@ -9,435 +9,292 @@ metadata:
   openclaw:
     homepage: https://drillr.ai
     emoji: "📈"
+  hermes:
+    namespace: drillr
+    category: research
+  lobehub:
+    identifier: drillr
+    category: finance
 ---
 
 # Drillr — Financial Research for Agents
 
-Drillr exposes its AI research agent and financial data pipeline to
-external agents through three equivalent channels: **MCP** (Streamable
-HTTP), **REST API**, and a **command-line tool**. All three accept the
-same `drl_*` API key and expose the same data.
+Drillr is a financial-research data backend for AI agents. This skill
+teaches you how to call its eight tools to answer questions about US
+and Japan public equities — fundamentals, SEC filings, earnings,
+insider activity, signals, and AI value-chain alt-data.
 
-## What you can do
-
-- **search** — Ask natural-language questions about companies, sectors,
-  tickers, filings, earnings. Runs server-side for 5-15s and returns a
-  synthesized answer with source attribution.
-- **signals** — Browse a curated feed of high-score market events
-  (news + filings + alerts), filterable by ticker / sector / date.
-- **articles** — Read published analyst articles with related-ticker,
-  sector, and reference metadata.
-- **watchlists** — Create, list, and mutate per-user ticker
-  collections. Persisted across sessions on the user's Drillr account.
+All access is via a single REST endpoint, wrapped by a Python
+dispatcher shipped with this skill at `scripts/drillr.py`. **Do not
+write raw curl commands** — invoke the dispatcher instead. It handles
+authentication, error mapping, and credit accounting in one place.
 
 ---
 
-## Detecting the deployment context
+## Setup — verify or onboard the API key
 
-Your onboarding path depends on ONE question:
-
-> Can the user run shell commands on the machine where you are running,
-> and see the output directly in the same conversation?
-
-Physical hardware doesn't matter. A Mac mini, MacBook, home NAS,
-Raspberry Pi, or cloud VM can all serve either path. What matters is
-whether the user's current channel to you is **co-located with your
-shell** or **relayed through a chat channel**.
-
-### Path A — Indirect (relayed)
-
-Signals that suggest Path A:
-
-- User is chatting with you via Telegram / WhatsApp / Slack / Discord /
-  a web chat UI / any IM
-- Your input channel is text-only — you have no shared terminal
-- User mentions they're on a phone, or away from the host machine
-- Your runtime is a bot webhook (e.g. Telegram bot handler)
-- The user cannot paste the output of `ls ~/.config/` back to you
-
-→ Use **Onboarding A** below.
-
-### Path B — Direct (co-located)
-
-Signals that suggest Path B:
-
-- You are running as Claude Code, a local Claude Agent SDK session, or
-  any CLI the user is typing into right now
-- You have a Bash / shell tool and anything you run is visible to the
-  user in the same pane
-- The user can copy-paste your suggested `export` or config-edit
-  commands and run them immediately
-
-→ Use **Onboarding B** below.
-
-### When unsure, ask the user
-
-> Quick setup question: are you talking to me through a terminal on the
-> same machine I'm running on — where I can suggest shell commands for
-> you to run — or through a separate channel like Telegram / WhatsApp /
-> a web chat?
-
----
-
-## Prerequisites — getting an API key
-
-Do NOT attempt any tool call until you have a `drl_*` key accessible to
-your runtime. If it's missing, run the onboarding path that matches
-your deployment context.
-
-### Onboarding A — Indirect (IM / web chat / remote host)
-
-The user reaches you through a text-only relay and cannot touch your
-filesystem. They will complete the key creation from whatever browser
-they have (phone, tablet, or desktop) and paste the key back to you.
-
-**Step 1 — Tell the user (verbatim):**
-
-> To use Drillr I need an API key. From any browser (your phone is
-> fine):
->
-> 1. Open https://drillr.ai/developer/keys
-> 2. Sign in — **Google sign-in is the quickest**; email/password also
->    works
-> 3. Tap "Create API key" → give it a name (e.g. "my-agent") → copy
->    the `drl_...` string
-> 4. Paste it back to me here. The key is shown only once.
->
-> After I confirm it works, you can delete your message.
-
-**Step 2 — When the key arrives, persist it:**
-
-Write it to `~/.config/drillr/config.json` with file mode `0600`:
-
-```json
-{ "api_key": "drl_..." }
-```
-
-Equivalent shell:
+Before any tool call, run a probe. The dispatcher reads the key from
+the single source of truth: `~/.drillr/config.json`.
 
 ```bash
-mkdir -p ~/.config/drillr
-umask 077
-cat > ~/.config/drillr/config.json <<EOF
-{ "api_key": "$KEY" }
-EOF
-chmod 600 ~/.config/drillr/config.json
+python scripts/drillr.py probe
 ```
 
-**Step 3 — Verify the key works:**
+**Possible outcomes:**
+
+| stderr first line     | Exit | What to do                                                                |
+| --------------------- | ---- | ------------------------------------------------------------------------- |
+| (success — JSON on stdout) | 0  | Key is valid. Proceed.                                                  |
+| `NO_KEY: ...`         | 2    | Run the onboarding flow below.                                            |
+| `INVALID_KEY: ...`    | 3    | Existing key was revoked / expired. Re-run onboarding to refresh.         |
+| `RATE_LIMIT: ...`     | 4    | Transient. Wait, then retry; do not bother the user.                      |
+| `NETWORK: ...`        | 1    | Gateway unreachable. Surface the error to the user.                       |
+
+### Onboarding flow (when probe returns NO_KEY or INVALID_KEY)
+
+Detect your deployment context first — it changes the wording you use,
+not the steps:
+
+- **Co-located**: you're running in a terminal the user is also typing
+  into (Claude Code, OpenClaw, Hermes CLI). You can suggest commands;
+  the user pastes the key back.
+- **Relayed**: you reach the user via Telegram / Slack / Discord / a
+  chat UI, with no shared shell. The user opens a browser on their
+  own device and pastes the key back to you.
+
+Either way, the steps are:
+
+1. Ask the user to open <https://drillr.ai/developer/keys> in any
+   browser (phone works). Google sign-in is the fastest path.
+2. Tell them to click **Create API key**, name it (e.g. `my-agent`),
+   and copy the key string. It is shown only once.
+3. When they paste it back, store it:
+
+   ```bash
+   python scripts/drillr.py setup-key <the_key_they_pasted>
+   ```
+
+4. Re-run `probe` to confirm the key works.
+5. Confirm to the user **with a masked key only** — e.g. `Stored
+   dgr_live...e9f2.` Never echo the full key. Suggest they delete
+   their message containing the key.
+
+If `setup-key` fails (permission error on `~/.drillr/`), surface the
+exact error to the user; never silently hold the key in memory.
+
+---
+
+## Tool overview — what to call when
+
+All tools are invoked the same way:
 
 ```bash
-curl -sS -o /dev/null -w "%{http_code}\n" \
-  -H "Authorization: Bearer drl_..." \
-  https://gateway.drillr.ai/api/v1/watchlists
+python scripts/drillr.py call <tool> [--json '<body>' | --query '<qs>']
 ```
 
-Expect HTTP `200`. On `401`, the key is invalid — apologize, ask the
-user to regenerate, and rerun Step 1.
+- POST tools take `--json '<body>'`
+- GET tools take `--query '<query_string>'` or `--json '<obj>'`
+  (object will be auto-converted to query string)
 
-**Step 4 — Confirm to the user, masked:**
+| Tool                | Method | Use when the user asks about…                                                                                              |
+| ------------------- | ------ | -------------------------------------------------------------------------------------------------------------------------- |
+| `company_search`    | POST   | "Find me NVDA / Apple / semiconductor companies / AI infrastructure peers" — resolve a name to a ticker; surface peers     |
+| `run_sql`           | POST   | Numeric fundamentals — financials, ratios, prices, earnings, insider, ownership. 90+ standardized tables                   |
+| `list_tables`       | GET    | Discover available alt-data tables in a category (`Twitter`, `AI Models`, `Compute`, etc.)                                 |
+| `get_table_schema`  | GET    | Inspect columns / types of a specific table before writing SQL                                                             |
+| `sec_report_list`   | GET    | List filings (10-K / 10-Q / 20-F / 6-K / S-1 / DEF 14A) for a ticker and date range                                        |
+| `sec_report_search` | POST   | Paragraph-level semantic search inside SEC filings — risk factors, MD&A, segment notes, etc.                               |
+| `signal_list`       | GET    | "What's moving in the market today / this week?" — curated cross-asset event feed with importance scoring                  |
+| `fiscal_utility`    | GET    | Map fiscal periods to calendar dates for companies with non-calendar fiscal years (e.g. NVDA's FY ends in January)         |
 
-> Stored `drl_xxxxxxxx_...e9f2`. You can safely delete your message now.
+> **Always invoke via `python scripts/drillr.py call <tool>`**, not
+> raw HTTP. The dispatcher already knows the method and URL.
 
-**Rules:**
-
-- Never echo the full key back to the user
-- Never write the key into conversation logs, prompts, or scratchpads
-- Never commit it to any file other than `~/.config/drillr/config.json`
-- If storage fails (permission denied, etc.), tell the user the exact
-  error — don't silently hold the key in memory
-
-### Onboarding B — Direct (terminal co-located with user)
-
-The user can run shell commands and see their output. Pick ONE of the
-three equivalent options and instruct the user accordingly. All three
-expect the same `drl_*` key created at
-<https://drillr.ai/developer/keys>.
-
-**B1. MCP via Claude Code (recommended for Claude Code users)**
-
-Tell the user:
-
-> 1. Create an API key at <https://drillr.ai/developer/keys> (Google
->    sign-in is easiest)
-> 2. Add to `~/.claude.json` (or merge into the existing `mcpServers`
->    object):
->
->    ```json
->    {
->      "mcpServers": {
->        "drillr": {
->          "type": "http",
->          "url": "https://gateway.drillr.ai/mcp",
->          "headers": {
->            "Authorization": "Bearer ${DRILLR_API_KEY}"
->          }
->        }
->      }
->    }
->    ```
->
-> 3. Add `export DRILLR_API_KEY=drl_...` to your shell rc
->    (`~/.zshrc` / `~/.bashrc`) and restart the shell
-> 4. Restart Claude Code. `/mcp` should list `drillr` as connected.
-
-**B2. CLI**
-
-```
-npm install -g drillr-cli
-drillr auth set-key drl_...
-drillr watchlist list     # verify: should list (or print "no watchlists yet")
-```
-
-**B3. REST with env var**
-
-```
-export DRILLR_API_KEY=drl_...
-curl -H "Authorization: Bearer $DRILLR_API_KEY" \
-     https://gateway.drillr.ai/api/v1/watchlists
-```
+For exact parameters per tool, read `references/tools.md` (loaded
+only when needed). For the 90+ SQL table catalog, read
+`references/sql_schemas.md`. For multi-tool workflow templates, read
+`references/workflows.md`.
 
 ---
 
-## Choosing a channel (after onboarding completes)
+## Decision tree — picking the right tool
 
-Pick based on your runtime's capabilities:
+A user question is rarely a 1:1 mapping to a tool. Common patterns:
 
-| Runtime characteristic              | Preferred channel    |
-| ----------------------------------- | -------------------- |
-| Has native MCP client support       | **MCP**              |
-| HTTP only (no MCP, no shell)        | **REST**             |
-| Shell / subprocess available        | **CLI** or **REST**  |
+### Numbers about a known ticker → `run_sql`
 
-All three are equivalent in data and rate limit. MCP tool names
-operate by natural names (e.g. watchlist by name); REST uses UUIDs.
+"AAPL gross margin last 4 quarters" / "MSFT operating cash flow trend":
 
----
+1. If the ticker is implied not explicit ("Apple" / "the chip giant"),
+   first `company_search` to resolve.
+2. If you don't know which table holds the metric, `list_tables` for
+   the relevant category, then `get_table_schema` for the candidate
+   table, then `run_sql`.
+3. `run_sql` only accepts `SELECT` — the gateway rejects anything else
+   with `400 invalid_request`.
 
-## Capabilities
+### "What did the filing say about X" → `sec_report_search`
 
-### Research & data lookup — `search`
+"How does NVDA describe its export-license risk?" / "What guidance did
+TSLA give for FY26 in the latest 10-Q?":
 
-Ask natural-language questions about companies, tickers, sectors,
-filings, earnings. Runs 5-15s server-side and returns markdown text
-with source references.
+1. `sec_report_search` with `{query, ticker}` returns paragraph-level
+   matches with citation metadata. Quote the text and cite the filing
+   period and form type.
 
-| Channel | Call                                                            |
-| ------- | --------------------------------------------------------------- |
-| MCP     | `search({ question, session_id?, context? })`                   |
-| REST    | `POST /api/v1/search` with `{ question, session_id?, stream? }` |
-| CLI     | `drillr search "<question>"`                                    |
+### Whole-filing browsing → `sec_report_list`
 
-**Session continuity:** pass the returned `session_id` in the next
-call to continue the same research conversation. Use `context` to
-pass background info that refines the answer.
+"What did NVDA file recently?" — `sec_report_list?ticker=NVDA&limit=10`.
 
-**Data coverage:**
-- **Market data** — real-time quotes, historical OHLCV, index prices
-  & composition (S&P 500, Dow, NASDAQ 100)
-- **Fundamentals** — income / balance / cash flow statements
-  (quarterly & annual), valuation ratios, company snapshots
-- **Earnings** — call transcripts with AI summaries, calendar with
-  EPS/revenue estimates vs actuals
-- **Analyst research** — ratings & price targets (~550K events from
-  500+ firms), consensus rollups
-- **SEC filings** — semantic search across 10-K, 10-Q, 8-K, 20-F,
-  6-K, S-1, F-1
-- **Corporate events** — M&A, debt issuance, securities offerings
-- **People & governance** — executive profiles, compensation,
-  appointments & departures
-- **Ownership** — insider trades (Form 3/4/5), institutional
-  holdings (13F-HR, 13D/G)
-- **News** — aggregated financial news with importance scoring
-- **Company discovery** — by industry, product, technology, business
-  model, supply chain
-- **Alternative data** — energy, data centers, semiconductors,
-  compute & inference pricing, AI model development, platform
-  adoption, sentiment, macro & trade, patents
+### Markets / news / signals → `signal_list`
 
-**When to use `search`:**
-- Stock prices, company financials, market data
-- SEC filing content (risk factors, revenue breakdown, MD&A)
-- Earnings summaries or analyst consensus
-- Insider trading or institutional ownership
-- Alternative data (AI value chain, energy, semiconductors)
-- Compare companies or sectors
+"Anything moving in semis today?" / "What's the most important news
+about NVDA this week?":
 
-**Example questions that work well:**
-- "What is AAPL's current PE ratio, and how does it compare to MSFT?"
-- "Summarize NVDA's latest 10-Q earnings"
-- "Which semiconductor companies had insider buying this month?"
+1. `signal_list?tickers=NVDA&from_date=<iso>&limit=20`
+2. For each notable signal, optionally drill into a fuller report with
+   `sec_report_search` (if the trigger is a filing) or `run_sql` (if
+   the trigger is a price move).
 
-### Signals — `signals`
+### Sector / theme discovery → `company_search`
 
-A curated investment-event feed. Each signal is **one market event**
-(one SUBJECT × one ACTION × one TIME), already aggregated across
-outlets — you get one record per event, not one per article.
+"AI infrastructure leaders" / "lithium miners with US exposure" —
+`company_search` accepts natural-language descriptions, not just
+tickers. Returns candidates with `match_reason`.
 
-**Coverage** — sources rolled into the feed:
+### Fiscal-period gymnastics → `fiscal_utility`
 
-- News & wires: Finnhub, NewsAPI, GDELT, FMP, Bloomberg, Reuters,
-  WSJ, FT, CNBC
-- Filings: SEC 8-K, 13D/G, 6-K (foreign issuers), structured 8-K
-  earnings data, earnings-call summaries
-- Corporate disclosure: press releases
-- Macro & policy: Fed / FOMC / BOJ / ECB / SEC / White House /
-  Truth Social
-- Market microstructure: analyst ratings, insider trading, intraday
-  price movers
-- Social: select financial subreddits
-
-**Freshness**: signals appear within ~3–5 minutes of the originating
-event.
-
-| Channel | Call                                                                         |
-| ------- | ---------------------------------------------------------------------------- |
-| MCP     | `signals({ tickers?, sector?, since?, limit?, offset? })`                    |
-| REST    | `GET /api/v1/signals?tickers=AAPL,MSFT&sector=Technology&since=...&limit=20` |
-| CLI     | `drillr signals --tickers AAPL,MSFT --limit 5`                               |
-
-Response shape: `{ headline, summary, suggested_tickers[], sector[], created_at }`, ordered newest first.
-
-### Articles — `article_list` / `article_get`
-
-Research articles spanning company-specific analysis, event coverage,
-and industry trackers.
-
-**What you'll find**:
-
-- **Company & thesis** — focused single-name or small-group analysis
-  (1–3 tickers), peer comparisons, annual ticker theses, SEC-filing
-  follow-ups
-- **Event coverage** — postmortems on what just happened, watch-pieces
-  on pending events (policy decisions, upcoming earnings, lawsuits),
-  follow-up checkpoints on previously covered events, macro-event
-  analysis
-- **Industry & sector** — thematic industry pieces (≥5 names),
-  recurring sector trackers
-
-
-| Channel | Call                                                                     |
-| ------- | ------------------------------------------------------------------------ |
-| MCP     | `article_list({ ticker?, tag?, limit?, offset? })` / `article_get({ article_id })` |
-| REST    | `GET /api/v1/articles?ticker=NVDA&limit=10` / `GET /api/v1/articles/:id` |
-| CLI     | `drillr articles list --ticker NVDA` / `drillr articles get <uuid>`      |
-
-`article_get` returns the article body (markdown), plus `topics` and
-`references` arrays. `article_list` returns 11 public fields per row
-(id, title, summary, content, related_tickers, tags, sector, citation,
-published_at, created_at, word_count).
-
-### Watchlists
-
-Per-user ticker collections. Owner-isolated (RLS): each key only sees
-and mutates its owner's watchlists. Attempting to access another user's
-watchlist by UUID returns `404`, not `403`.
-
-| MCP (by name)                                        | REST (by UUID)                                    |
-| ---------------------------------------------------- | ------------------------------------------------- |
-| `watchlist_list`                                     | `GET /api/v1/watchlists`                          |
-| `watchlist_create({ name, tickers? })`               | `POST /api/v1/watchlists`                         |
-| `watchlist_add({ ticker, watchlist_name? })`         | `POST /api/v1/watchlists/:id/tickers`             |
-| `watchlist_remove({ ticker, watchlist_name? })`      | `DELETE /api/v1/watchlists/:id/tickers/:ticker`   |
-| `watchlist_delete({ watchlist_name })`               | `DELETE /api/v1/watchlists/:id`                   |
-
-CLI: `drillr watchlist {list|create|add|remove|delete}` — see
-`drillr watchlist --help`.
-
-> MCP tools accept watchlist **names** (chat-friendly). REST uses
-> **UUIDs** (URL-friendly). If `watchlist_name` is omitted on add, a
-> default "My Watchlist" is used (created on miss).
+When the user says "Q3" but the company's fiscal year doesn't line up
+with calendar quarters (NVDA's FY ends January, AAPL's ends
+September), use `fiscal_utility` before constructing date filters in
+`run_sql`.
 
 ---
 
-## Typical workflows
+## Common workflows
 
-### "Daily research briefing"
+### Quick lookup
 
-User: "Can you do a daily morning briefing on my portfolio?"
+User: *"What's NVDA's current PE ratio?"*
 
-1. `watchlist_list` — see what tickers the user already tracks
-2. If empty, ask the user for tickers; then `watchlist_create`
-3. Each morning, execute in order:
-   - `signals({ tickers: [...watchlist_tickers], since: "<24h-ago ISO>" })`
-   - For any high-interest signal, `search({ question: "Deeper context on <headline>" })`
-   - `article_list({ ticker: ... })` for any ticker with fresh activity
-4. Synthesize into a chat-sized briefing (headline + 1-2 sentences + links)
+1. `run_sql` over `valuation_ratios` (use `get_table_schema` first if
+   unsure of the column name).
+2. Return one number + the source table + the as-of date.
 
-### "Quick lookup"
+### Quarterly earnings comparison
 
-User: "What's Nvidia's market cap?"
+User: *"Compare AMD and NVDA gross margin last 4 quarters."*
 
-1. `search({ question: "What is NVDA's current market cap?" })`
-2. Relay the answer and any cited sources
+1. `run_sql` once with a `WHERE ticker IN ('AMD','NVDA')` query.
+2. Present as a small table; flag any QoQ delta > 200 bps.
 
-### "Sector scan"
+### Filing-driven research
 
-User: "Any interesting biotech moves this week?"
+User: *"Summarize NVDA's latest 10-Q risk factors."*
 
-1. `signals({ sector: ["Health Care"], since: "<7d-ago ISO>", limit: 30 })`
-2. For each signal the user asks about, `article_list({ ticker })` or
-   a follow-up `search` with `session_id` from the prior call
+1. `sec_report_list?ticker=NVDA&form_type=10-Q&limit=1` to confirm the
+   most recent quarter.
+2. `sec_report_search` with `{query: "risk factors", ticker: "NVDA"}`
+   constrained to that filing.
+3. Cluster the returned paragraphs by theme; quote selectively; cite
+   the form type and fiscal period.
+
+### Morning market scan
+
+User: *"Brief me on what moved in semis overnight."*
+
+1. `signal_list?sector=information_technology&from_date=<8h-ago iso>&limit=30`
+2. Filter for high-score signals (`score >= 3`).
+3. For top 3-5, return headline + 1-sentence implication.
+
+More workflow templates: `references/workflows.md`.
+
+---
+
+## Output and citation discipline
+
+- **Numbers**: always state the unit (USD millions, percentage points,
+  share count). Always state the as-of date / fiscal period.
+- **Filing quotes**: cite form type + fiscal period + ticker (e.g.
+  "NVDA 10-Q FQ3 2026 — Item 1A Risk Factors").
+- **Signals**: when summarizing, include the source name(s) from
+  `trigger_sources` so the user can verify.
+- **SQL output**: never present raw column tuples — convert to a
+  named table or prose. The user does not want to read JSON.
+
+---
+
+## Out of scope
+
+Drillr does not cover:
+
+- Private / unlisted companies (US + Japan public listings only)
+- On-chain crypto metrics (TVL, wallet flow, holders). It has CEX
+  prices for BTC/ETH/SOL, not chain data.
+- Options chains, real-time order book, intraday tick data
+- Retail brokerage actions (placing orders, managing positions)
+- Drillr does not produce its own price forecasts — surface analyst
+  consensus, not opinion
+
+If the user asks for any of the above, say so directly and suggest the
+nearest in-scope substitute (e.g. "I don't have options chains, but I
+can pull recent implied-vol commentary from analyst transcripts via
+`sec_report_search`").
 
 ---
 
 ## Error handling
 
-| HTTP | `code` string                | What to do                                                                                  |
-| ---- | ---------------------------- | ------------------------------------------------------------------------------------------- |
-| 400  | `invalid_body` / `invalid_query` / `invalid_id` | Fix parameter shape and retry (don't pester the user)                   |
-| 401  | `unauthenticated` / `key_invalid` | Re-read the stored key; if still 401, rerun Prerequisites — the key is absent or wrong |
-| 401  | `key_revoked`                | Tell the user their key was revoked; they need to create a new one at the developer portal |
-| 401  | `key_expired`                | Tell the user their key expired; same fix                                                   |
-| 403  |                              | Key is valid but lacks `external` scope — user needs to issue a different key               |
-| 404  | `not_found`                  | Resource doesn't exist, or RLS hides it (someone else's). Do NOT assume just-deleted        |
-| 429  |                              | Inspect `retry_after_seconds` in the body; sleep and retry                                  |
-| 502  | `upstream_error`             | Transient data-source failure; retry once after 2-3s, then surface to user                  |
+The dispatcher maps HTTP status to structured stderr + exit codes.
+React per code:
 
-**On any 401: re-read `~/.config/drillr/config.json` or the
-`DRILLR_API_KEY` env var BEFORE asking the user.** You have the
-configuration — diagnose first, then instruct.
+| Exit | stderr label   | Recover by…                                                                |
+| ---- | -------------- | -------------------------------------------------------------------------- |
+| 0    | (none)         | Parse stdout JSON, continue                                                |
+| 1    | `USAGE` / `NETWORK` / `PARSE` | Tool was misused or gateway unreachable. Fix and retry once. |
+| 2    | `NO_KEY`       | Run onboarding flow above                                                  |
+| 3    | `INVALID_KEY`  | Key revoked / expired — re-run onboarding to refresh                       |
+| 4    | `RATE_LIMIT`   | Wait ~30s and retry. Do not pester the user. Pace ≤ 0.5 req/s              |
+| 5    | `API_ERROR`    | Read the JSON body printed under the label; usually a parameter problem.   |
 
-**Never** tell the user to "check their configuration."
-
----
-
-## Rate limits
-
-30 requests per minute per API key. On `429` the response body
-includes `retry_after_seconds` (1-60s). For workflows that fan out
-(e.g., scanning a 50-ticker watchlist), pace at ≤0.5 req/s or batch
-via a single `search` or `signals` call with multiple tickers.
+**On a 401 (`INVALID_KEY`), the most common cause is a revoked key,
+not a typo.** Diagnose by reading `~/.drillr/config.json` and the
+exit-code label *before* asking the user.
 
 ---
 
-## Advanced
+## Reference files
 
-Drillr also supports OAuth 2.1 for MCP clients that implement Dynamic
-Client Registration (e.g., Claude Code's built-in MCP OAuth). This
-skill deliberately does **not** cover that path because:
+Loaded only when the task requires them — `progressive disclosure`:
 
-- OAuth access tokens expire hourly and require client-side refresh
-  that not all MCP runtimes implement correctly
-- The browser callback step assumes the user and agent share a
-  machine; Path A deployments (remote host / IM-driven) cannot
-  complete it
-
-For agent automation, prefer the `drl_*` API key flow above. If you
-are a human user setting up Claude Code on your own laptop and prefer
-the OAuth UX, see the Drillr developer portal
-(<https://drillr.ai/developer/docs>).
+| File                         | When to read                                                         |
+| ---------------------------- | -------------------------------------------------------------------- |
+| `references/tools.md`        | Need exact parameter shape, response schema, or credit cost          |
+| `references/sql_schemas.md`  | Writing `run_sql` and need to discover the right table / column      |
+| `references/workflows.md`    | User asks for a research workflow that spans 3+ tool calls           |
 
 ---
 
-## Reference
+## Notes for runtime authors
 
-- Developer portal: <https://drillr.ai/developer>
-- Create / manage API keys: <https://drillr.ai/developer/keys>
-- Full API reference: <https://drillr.ai/developer/docs>
-- Gateway base URL: `https://gateway.drillr.ai`
-- MCP endpoint: `https://gateway.drillr.ai/mcp`
-- CLI on npm: `drillr-cli` (`npm install -g drillr-cli`)
+- The dispatcher uses Python 3 stdlib only (`urllib`, `json`, `ssl`).
+  No `pip install` required.
+- Gateway base URL defaults to `https://gateway.drillr.ai`. Override
+  for staging / local with the `DRILLR_GATEWAY_URL` env var.
+- Key storage path is `~/.drillr/config.json` (mode 0600). This is
+  the **single source of truth** — the dispatcher does not check
+  environment variables, keychain, or anywhere else. If you need to
+  rotate, run `setup-key` again or delete the file.
 
-Tracks External API **v1** (2026-04). Breaking changes will ship as
+---
+
+## Reference links
+
+- Drillr web: <https://drillr.ai>
+- API keys: <https://drillr.ai/developer/keys>
+- Developer docs: <https://drillr.ai/developer/docs>
+- Gateway: `https://gateway.drillr.ai`
+- MCP endpoint (for hosts that don't support skills): `https://gateway.drillr.ai/mcp/data`
+
+Tracks Drillr External API **v1** (2026-05). Breaking changes ship as
 `/api/v2/*` alongside `/api/v1/*`.

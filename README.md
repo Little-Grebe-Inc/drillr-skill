@@ -1,16 +1,51 @@
 # drillr-skill
 
-Agent-readable skill for [Drillr](https://drillr.ai) — financial
-research, signals, articles, and watchlists, available over **MCP**,
-**REST**, and a **CLI**.
+Agent Skill for [Drillr](https://drillr.ai) — financial-research data
+for US and Japan public equities, exposed to any SKILL.md-compatible
+agent runtime.
 
-This repository is the distribution point for the Drillr agent skill.
-Drop it into any Claude Agent Skills-compatible runtime and your
-agent will be able to onboard a user, collect an API key, and start
-pulling financial data — whether the user is sitting at a terminal or
-chatting from their phone.
+This is the small thing you give a user so their agent can:
+
+- Resolve tickers, fetch standardized financial statements / ratios /
+  prices, search SEC filings paragraph-by-paragraph, surface curated
+  market signals, and explore AI value-chain alt-data
+- Onboard a first-time user (walk them through API key creation), then
+  remember the key locally for future sessions
+
+The skill ships with a small Python dispatcher
+(`scripts/drillr.py`) that wraps the Drillr REST API — stdlib only,
+no `pip install` required. The agent invokes the dispatcher; the
+dispatcher handles auth, errors, and credit accounting in one place.
+
+> For agent runtimes that **don't** support skills (raw MCP clients,
+> ChatGPT MCP, etc.), use [drillr-mcp-server](https://github.com/Little-Grebe-Inc/drillr-mcp-server)
+> instead — it exposes the same data as a standard MCP server.
 
 ## Install
+
+### OpenClaw
+
+```bash
+openclaw skills install drillr
+```
+
+Or clone into the OpenClaw skills directory:
+
+```bash
+git clone https://github.com/Little-Grebe-Inc/drillr-skill ~/.openclaw/skills/drillr
+```
+
+### Hermes Agent
+
+```bash
+hermes skills install drillr
+```
+
+Or clone manually:
+
+```bash
+git clone https://github.com/Little-Grebe-Inc/drillr-skill ~/.hermes/skills/drillr
+```
 
 ### Claude Code / Claude Agent SDK
 
@@ -18,84 +53,71 @@ chatting from their phone.
 git clone https://github.com/Little-Grebe-Inc/drillr-skill ~/.claude/skills/drillr
 ```
 
-Restart Claude Code. The skill auto-loads based on the `description`
-field in `SKILL.md`, so Claude will invoke it when the user asks
-about stocks, earnings, signals, etc.
-
-### Smithery (one-line install for any Smithery-compatible client)
-
-```bash
-npx -y @smithery/cli install drillr/drillr --client claude
-```
-
-Wires Drillr's MCP server into your client via Smithery's gateway —
-authorization goes through Drillr OAuth, no API key paste required.
-
-Browse the listings:
-
-- MCP server: <https://smithery.ai/servers/drillr/drillr>
-- Skill: <https://smithery.ai/skills/drillr/drillr>
-
-### Clawhub / OpenClaw
-
-The frontmatter in `SKILL.md` includes the `metadata.openclaw.*`
-fields required by the [clawhub skill format](https://clawhub.ai).
-Install via your clawhub client, or clone into your OpenClaw skills
-directory.
-
-### Hermes Agent
-
-```bash
-git clone https://github.com/Little-Grebe-Inc/drillr-skill ~/.hermes/skills/drillr
-```
-
-Or, to make it discoverable to anyone who has Hermes:
-
-```bash
-hermes skills tap add Little-Grebe-Inc/drillr-skill
-```
-
-Restart Hermes — the skill will appear in `/skills browse` and
-auto-register as a slash command.
+Restart Claude Code. The skill auto-loads on relevant questions (the
+`description` field is matched by Claude against the user's question).
 
 ### Other agent runtimes
 
-The skill is a single `SKILL.md` with YAML frontmatter and Markdown
-body — no executables, no helper scripts, no MCP bundle required.
-Any runtime that can read [Agent Skills](https://agentskills.io)
-files should work; the install path is typically the runtime's
-`skills/` directory (e.g. `~/.claude/skills/`, `~/.hermes/skills/`,
-`~/.config/<runtime>/skills/`).
+The skill follows the open [agentskills.io](https://agentskills.io)
+SKILL.md format — adopted by 40+ products. Most runtimes' install
+path is `~/.<runtime>/skills/<slug>/`. Clone there and you're done.
+
+## First run
+
+After install, ask the agent any drillr-relevant question, e.g.:
+
+> *"What's NVDA's gross margin trend over the last 4 quarters?"*
+
+The skill detects the missing API key and walks the user through:
+
+1. Open <https://drillr.ai/developer/keys> in any browser
+2. Sign in (Google sign-in is fastest)
+3. Click "Create API key", copy the string
+4. Paste it back to the agent
+
+The agent then runs `python scripts/drillr.py setup-key <key>` —
+the key is stored at `~/.drillr/config.json` (mode `0600`) as the
+single source of truth.
+
+## Verify
+
+```bash
+python ~/.openclaw/skills/drillr/scripts/drillr.py probe
+```
+
+(Adjust the path for your runtime.) Expect a JSON output with
+`"ok": true` and a credit-balance summary.
 
 ## What's inside
 
 ```
 drillr-skill/
-├── SKILL.md                           # the skill itself
-├── README.md                          # this file
-├── CHANGELOG.md                       # version history pinned to API version
-└── examples/
-    ├── claude-code-mcp-config.json    # drop-in MCP config for Claude Code
-    ├── openclaw-mcp-config.json       # drop-in MCP config for OpenClaw
-    ├── hermes-mcp-config.yaml         # drop-in MCP config for Hermes
-    └── user-onboarding-script.md      # copy-paste-able onboarding prompts
+├── SKILL.md              # what the agent reads — overview, decision tree, onboarding
+├── README.md             # this file
+├── CHANGELOG.md          # version history
+├── LICENSE
+├── scripts/
+│   └── drillr.py         # unified dispatcher (Python 3 stdlib, no deps)
+└── references/
+    ├── tools.md          # exact parameter schemas per tool — loaded on demand
+    ├── sql_schemas.md    # SQL table discovery guide
+    └── workflows.md      # multi-tool research templates
 ```
 
-## Prerequisites for use
+## Prerequisites
 
-- A Drillr account (free): <https://drillr.ai>
-- An `external` scope API key: <https://drillr.ai/developer/keys>
-
-The skill itself handles teaching the agent how to onboard the
-user and collect the key — you don't need to do anything special
-beyond dropping the skill in.
+- A free [drillr.ai](https://drillr.ai) account
+- An API key from <https://drillr.ai/developer/keys>
+- Python 3 (preinstalled on macOS and most Linux distros)
 
 ## License
 
-MIT — see `LICENSE`.
+MIT — see [`LICENSE`](./LICENSE).
 
 ## Links
 
 - Drillr: <https://drillr.ai>
-- API reference: <https://drillr.ai/developer/docs>
-- Issues / feedback: <https://github.com/Little-Grebe-Inc/drillr-skill/issues>
+- Developer docs: <https://drillr.ai/developer/docs>
+- API keys: <https://drillr.ai/developer/keys>
+- MCP server (for non-skill runtimes): <https://github.com/Little-Grebe-Inc/drillr-mcp-server>
+- Issues: <https://github.com/Little-Grebe-Inc/drillr-skill/issues>
