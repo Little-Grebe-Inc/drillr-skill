@@ -186,18 +186,29 @@ def cmd_call(args: argparse.Namespace) -> None:
         except json.JSONDecodeError as e:
             die(1, "USAGE", f"--json is not valid JSON: {e}")
         if method == "GET":
-            # gateway GETs read params from query string; auto-convert
+            # GET tools read params from query string. We accept --json as a
+            # convenience (so callers can use the same {k:v} shape as POST),
+            # but the top-level must be an object. Anything else is a usage error.
+            if not isinstance(body, dict):
+                die(
+                    1,
+                    "USAGE",
+                    f"--json for GET tool '{tool}' must be a JSON object (got {type(body).__name__}). "
+                    f"Use --query 'k=v&k=v' instead, or pass a dict like --json '{{\"ticker\":\"AAPL\"}}'.",
+                )
             query = urllib.parse.urlencode(
                 {k: (json.dumps(v) if isinstance(v, (list, dict)) else v) for k, v in body.items()}
             )
             body = None
     elif args.query:
         if method != "GET":
-            die(1, "USAGE", f"--query only valid for GET tools; '{tool}' is {method}")
+            die(1, "USAGE", f"--query only valid for GET tools; '{tool}' is {method}. Use --json '{{...}}' instead.")
         query = args.query
 
     if method == "POST" and body is None:
-        die(1, "USAGE", f"--json required for POST tool '{tool}'")
+        die(1, "USAGE", f"--json required for POST tool '{tool}' (e.g. --json '{{\"ticker\":\"AAPL\"}}')")
+    if method == "GET" and not query and not args.json:
+        die(1, "USAGE", f"GET tool '{tool}' requires --query 'k=v&k=v' or --json '{{...}}'.")
 
     out = http_call(method, path, query=query, body=body)
     print(json.dumps(out, indent=2))

@@ -75,9 +75,16 @@ Either way, the steps are:
    ```
 
 4. Re-run `probe` to confirm the key works.
-5. Confirm to the user **with a masked key only** — e.g. `Stored
-   dgr_live...e9f2.` Never echo the full key. Suggest they delete
-   their message containing the key.
+5. **Confirm with a masked key, AND explicitly tell the user to
+   delete the message containing the full key.** This is a required
+   step, not optional. Example wording:
+
+   > Stored `dgr_live...e9f2`, balance 10,083 cr. **Please delete
+   > your message with the full key now** — it's been persisted in
+   > my session log and you don't want it sitting in chat history.
+
+   Never echo the full key back to the user. Never include it in any
+   summary, recap, or follow-up.
 
 If `setup-key` fails (permission error on `~/.drillr/`), surface the
 exact error to the user; never silently hold the key in memory.
@@ -89,12 +96,19 @@ exact error to the user; never silently hold the key in memory.
 All tools are invoked the same way:
 
 ```bash
-python scripts/drillr.py call <tool> [--json '<body>' | --query '<qs>']
+python <abs_path>/scripts/drillr.py call <tool> [--json '<body>' | --query '<qs>']
 ```
 
-- POST tools take `--json '<body>'`
-- GET tools take `--query '<query_string>'` or `--json '<obj>'`
-  (object will be auto-converted to query string)
+- **POST tools** take `--json '<body>'` (object).
+- **GET tools** take `--query 'k=v&k=v'` (preferred) or `--json
+  '<object>'` (auto-converted to query string). Don't pass a non-object
+  to `--json` for GET tools — it errors out.
+- **Always pass the absolute path** to `scripts/drillr.py` — many hosts
+  (OpenClaw, Hermes) sandbox shell execs and reject `cd <dir> && python …`
+  or other compound commands. Look up the skill's install path
+  (`$SKILL_DIR` if provided, else `~/.openclaw/workspace/skills/drillr/`
+  or `~/.openclaw/skills/drillr/` or `~/.hermes/skills/drillr/` or
+  `~/.claude/skills/drillr/`) and use it directly.
 
 | Tool                | Method | Use when the user asks about…                                                                                              |
 | ------------------- | ------ | -------------------------------------------------------------------------------------------------------------------------- |
@@ -121,16 +135,25 @@ only when needed). For the 90+ SQL table catalog, read
 
 A user question is rarely a 1:1 mapping to a tool. Common patterns:
 
-### Numbers about a known ticker → `run_sql`
+### Numbers about a known ticker
 
 "AAPL gross margin last 4 quarters" / "MSFT operating cash flow trend":
 
 1. If the ticker is implied not explicit ("Apple" / "the chip giant"),
    first `company_search` to resolve.
-2. If you don't know which table holds the metric, `list_tables` for
-   the relevant category, then `get_table_schema` for the candidate
-   table, then `run_sql`.
-3. `run_sql` only accepts `SELECT` — the gateway rejects anything else
+2. For **prices / volume / OHLCV**, use `run_sql` against
+   `price_volume_history` (confirmed-present table — see
+   `references/sql_schemas.md` for columns).
+3. For **standardized financials** (income statement, ratios,
+   balance-sheet items, EPS), today the **canonical path is
+   `sec_report_search`**, not `run_sql`. Vector-search the latest
+   10-Q / 10-K for the metric you want, extract the number from the
+   returned paragraph(s), and quote with citation.
+4. If you decide to try a SQL table, **always `get_table_schema`
+   first**, and **treat `columns: []` as the table not existing**
+   (the gateway returns 200 with empty columns instead of 404 for
+   unknown tables — see `references/sql_schemas.md`).
+5. `run_sql` only accepts `SELECT` — the gateway rejects anything else
    with `400 invalid_request`.
 
 ### "What did the filing say about X" → `sec_report_search`
@@ -173,20 +196,34 @@ September), use `fiscal_utility` before constructing date filters in
 
 ## Common workflows
 
-### Quick lookup
+### Quick lookup (price-class)
 
-User: *"What's NVDA's current PE ratio?"*
+User: *"What's NVDA's last close?"*
 
-1. `run_sql` over `valuation_ratios` (use `get_table_schema` first if
-   unsure of the column name).
-2. Return one number + the source table + the as-of date.
+1. `run_sql`: `SELECT period_end, close FROM price_volume_history
+   WHERE ticker='NVDA' AND time_frame='daily' ORDER BY period_end
+   DESC LIMIT 1`
+2. Return one number + the as-of date.
 
-### Quarterly earnings comparison
+### Quick lookup (fundamentals)
+
+User: *"What was AAPL's gross margin last quarter?"*
+
+1. Run `sec_report_search` on the latest 10-Q:
+   `{"ticker":"AAPL","query":"gross margin","top_k":5}`
+2. Extract the % from the returned paragraph; cite the form type
+   and fiscal period.
+3. Don't try SQL first — standardized financial tables aren't
+   reliably present in `run_sql` today.
+
+### Quarterly comparison (fundamentals)
 
 User: *"Compare AMD and NVDA gross margin last 4 quarters."*
 
-1. `run_sql` once with a `WHERE ticker IN ('AMD','NVDA')` query.
-2. Present as a small table; flag any QoQ delta > 200 bps.
+1. Run `sec_report_search` per ticker for the most recent 4 quarters'
+   filings; extract the gross-margin row from each.
+2. Build a comparison table from the extracted numbers.
+3. Cite each cell with its source filing period.
 
 ### Filing-driven research
 
@@ -240,6 +277,60 @@ If the user asks for any of the above, say so directly and suggest the
 nearest in-scope substitute (e.g. "I don't have options chains, but I
 can pull recent implied-vol commentary from analyst transcripts via
 `sec_report_search`").
+
+---
+
+## Runtime caveats — host-specific gotchas
+
+These are things that bit real users; SKILL.md notes them up-front so
+the agent doesn't burn turns rediscovering them.
+
+### Exec sandbox: use absolute paths, no compound commands
+
+OpenClaw, Hermes, and some Claude Code configurations sandbox shell
+execution and **reject `cd … && python …` or any inline compound
+command** with `complex interpreter invocation detected; refusing to
+run without script preflight validation`.
+
+Always invoke with the absolute path to the skill's `scripts/drillr.py`:
+
+```bash
+# good
+python /home/admin/.openclaw/workspace/skills/drillr/scripts/drillr.py probe
+
+# bad — sandbox will reject
+cd ~/.openclaw/skills/drillr && python scripts/drillr.py probe
+```
+
+If you can't find the install path, list the typical candidates and
+test `os.path.exists` on each. Common locations:
+
+- `~/.openclaw/workspace/skills/drillr/` (OpenClaw agent-installed)
+- `~/.openclaw/skills/drillr/` (OpenClaw user-global)
+- `~/.hermes/skills/drillr/`
+- `~/.claude/skills/drillr/`
+
+### Python 3.6 environments
+
+Some target Linux hosts (Alibaba Cloud, RHEL/CentOS family) ship
+Python 3.6.8 as the default. The dispatcher (`scripts/drillr.py`) is
+3.6-compatible. **If you write a helper script** to batch calls or
+parse output:
+
+- Don't use `subprocess.run(..., capture_output=True)` — that's 3.7+.
+  Use `stdout=subprocess.PIPE, stderr=subprocess.PIPE`.
+- Don't use walrus `:=`, `dict | dict` merge, or `from __future__
+  import annotations` features.
+
+### `get_table_schema` returns `columns: []` for missing tables
+
+Today the gateway returns `200` with `data.columns = []` for tables
+that don't exist, instead of `404`. **If `columns` is empty, treat
+the table as non-existent** — do not proceed to `run_sql` against it.
+See `references/sql_schemas.md` for the workflow.
+
+This is a known gateway behavior that may change; when it returns a
+proper error, this note can go away.
 
 ---
 

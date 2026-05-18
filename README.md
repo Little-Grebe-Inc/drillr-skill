@@ -25,15 +25,26 @@ dispatcher handles auth, errors, and credit accounting in one place.
 
 ### OpenClaw
 
+Once published to ClawHub:
+
 ```bash
 openclaw skills install drillr
 ```
 
-Or clone into the OpenClaw skills directory:
+Or clone manually into the OpenClaw skills directory:
 
 ```bash
+# user-global — available to every workspace (recommended)
 git clone https://github.com/Little-Grebe-Inc/drillr-skill ~/.openclaw/skills/drillr
+
+# OR workspace-local — only the current workspace sees it
+git clone https://github.com/Little-Grebe-Inc/drillr-skill ~/.openclaw/workspace/skills/drillr
 ```
+
+When you tell the OpenClaw agent to install it from a URL (the
+"prompt-as-installer" flow), it will typically place the skill in the
+**workspace-local** path — that's also fine, both paths are
+discovered by `openclaw skills check`.
 
 ### Hermes Agent
 
