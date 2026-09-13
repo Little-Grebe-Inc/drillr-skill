@@ -1,14 +1,23 @@
 {
   "name": "drillr-skill",
-  "owner": { "name": "Little Grebe Inc." },
-  "description": "The drillr agent skill: onboarding plus tool guidance for the drillr financial data MCP server and REST API.",
+  "owner": {
+    "name": "Little Grebe Inc."
+  },
+  "description": "The drillr agent skill: API-key onboarding and guidance for drillr's financial data and research API (US, China, Japan) — filings, statements, earnings, ownership, events, executives, analyst data, company discovery and research signals — with a pointer to the MCP server.",
   "plugins": [
     {
       "name": "drillr",
       "source": "./",
-      "description": "Financial research data for agents — four-market fundamentals via SQL, paragraph-cited filing search, news and event search, alt-data.",
+      "description": "Financial data and research for US, China and Japan equities: filings with full-text search, statements as reported, earnings, ownership, corporate events, executives, analyst data, company discovery and research signals. Every figure traced to its filing.",
       "category": "data",
-      "tags": ["finance", "sec-filings", "equity-research", "alternative-data", "mcp"]
+      "tags": [
+        "finance",
+        "sec-filings",
+        "equity-research",
+        "financial-data",
+        "rest-api",
+        "mcp"
+      ]
     }
   ]
 }

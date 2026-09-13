@@ -3,6 +3,20 @@
 All notable changes to this skill are tracked here. The skill version
 tracks the Drillr External API version it was written against.
 
+## [2.1.0] — 2026-09-13
+
+REST-first rewrite, aligned with drillr.ai/docs.
+
+### Changed
+- The skill now documents the Public Data API v2 (29 endpoints in 10 groups) as its primary surface: conventions, per-endpoint one-liners with coverage, credits, and six workflows written as REST calls. Every endpoint links to `drillr.ai/docs/api/<endpoint>`.
+- MCP is a pointer, not a manual: connect `drillr-data`, let the server describe its 10 tools, and use `reference/mcp-supplement.md` for what MCP adds (`run_sql`, fact-level `filing_search`). This removes the tool-name drift that hit 2.0.0 (`sec_report_*` → `filing_*`, `fiscal_utility` gone, `industry_inflections` and `ai_adoption` new).
+- Positioning follows the docs: financial data and research API for US, China and Japan, built from primary filings, every figure traceable. Alternative data is no longer a headline; the 9 public categories are listed in the MCP supplement as a secondary SQL capability.
+- Description field rewritten around the REST data groups.
+
+### Added
+- `reference/rest-endpoints.md`, generated from the OpenAPI contract by `scripts/gen-reference.py`.
+- `reference/mcp-supplement.md`: MCP tool index, the 17 core SQL tables, ticker conventions, alt-data catalog verified against the public server.
+
 ## [2.0.0] — 2026-09-13
 
 Rewritten against the current server. Breaking for anyone who scripted the v1 tool names.
