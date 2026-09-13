@@ -1,11 +1,8 @@
 {
   "mcpServers": {
-    "drillr": {
+    "drillr-data": {
       "type": "http",
-      "url": "https://gateway.drillr.ai/mcp",
-      "headers": {
-        "Authorization": "Bearer ${DRILLR_API_KEY}"
-      }
+      "url": "https://gateway.drillr.ai/mcp/data"
     }
   }
 }

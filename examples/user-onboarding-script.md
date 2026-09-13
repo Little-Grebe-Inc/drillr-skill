@@ -13,7 +13,7 @@ IM-friendly (short paragraphs, numbered steps).
 > To use Drillr I need an API key. From any browser (your phone is
 > fine):
 >
-> 1. Open https://drillr.ai/developer/keys
+> 1. Open https://drillr.ai/account/api-keys
 > 2. Sign in — **Google sign-in is the quickest**; email/password
 >    also works
 > 3. Tap "Create API key" → name it (e.g. "my-agent") → copy the
@@ -31,51 +31,37 @@ IM-friendly (short paragraphs, numbered steps).
 
 > That key didn't work — I got a 401 from Drillr. It may have a
 > typo, or it may have already been revoked. Could you go back to
-> https://drillr.ai/developer/keys, create a fresh one, and paste
+> https://drillr.ai/account/api-keys, create a fresh one, and paste
 > it again?
 
 ### When the key is revoked mid-session
 
 > Your Drillr API key was just revoked. To keep going, please
-> create a new one at https://drillr.ai/developer/keys and paste
+> create a new one at https://drillr.ai/account/api-keys and paste
 > it here.
 
 ---
 
 ## Path B — Direct (terminal co-located with user)
 
-### Claude Code MCP setup
+### Claude Code MCP setup (browser sign-in, no key)
 
-> 1. Create an API key at https://drillr.ai/developer/keys
-> 2. Add this to `~/.claude.json` (or merge it into your existing
+> 1. Run `claude mcp add --scope user --transport http drillr-data https://gateway.drillr.ai/mcp/data`, or add this to `~/.claude.json` (or merge it into your existing
 >    `mcpServers` object):
 >
 >    ```json
 >    {
 >      "mcpServers": {
->        "drillr": {
+>        "drillr-data": {
 >          "type": "http",
->          "url": "https://gateway.drillr.ai/mcp",
->          "headers": {
->            "Authorization": "Bearer ${DRILLR_API_KEY}"
->          }
+>          "url": "https://gateway.drillr.ai/mcp/data"
 >        }
 >      }
 >    }
 >    ```
 >
-> 3. Add `export DRILLR_API_KEY=drl_...` to your `~/.zshrc` or
->    `~/.bashrc` and restart your shell
-> 4. Restart Claude Code. Run `/mcp` — you should see `drillr`
->    listed as connected.
-
-### CLI setup
-
-> ```
-> npm install -g drillr-cli
-> drillr auth set-key drl_...
-> drillr watchlist list   # should succeed (empty is fine)
-> ```
+> 2. Restart Claude Code, run `/mcp`, pick `drillr-data` → Authenticate,
+>    and approve **drillr Data** in the browser.
 
 ### REST / env-var setup
 
@@ -84,4 +70,5 @@ IM-friendly (short paragraphs, numbered steps).
 > ```
 >
 > Then any HTTP call carries the header
-> `Authorization: Bearer $DRILLR_API_KEY`.
+> `Authorization: Bearer $DRILLR_API_KEY` (or `X-API-KEY`).
+> Base URL for typed data: https://gateway.drillr.ai/api/v2 — see https://drillr.ai/docs/api

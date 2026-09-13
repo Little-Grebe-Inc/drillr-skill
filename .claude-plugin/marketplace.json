@@ -1,0 +1,14 @@
+{
+  "name": "drillr-skill",
+  "owner": { "name": "Little Grebe Inc." },
+  "description": "The drillr agent skill: onboarding plus tool guidance for the drillr financial data MCP server and REST API.",
+  "plugins": [
+    {
+      "name": "drillr",
+      "source": "./",
+      "description": "Financial research data for agents — four-market fundamentals via SQL, paragraph-cited filing search, news and event search, alt-data.",
+      "category": "data",
+      "tags": ["finance", "sec-filings", "equity-research", "alternative-data", "mcp"]
+    }
+  ]
+}

@@ -3,6 +3,25 @@
 All notable changes to this skill are tracked here. The skill version
 tracks the Drillr External API version it was written against.
 
+## [2.0.0] — 2026-09-13
+
+Rewritten against the current server. Breaking for anyone who scripted the v1 tool names.
+
+### Changed
+- MCP endpoint is `https://gateway.drillr.ai/mcp/data` (server name `drillr-data`); `/mcp` and the v1 tool set (`search`, `signals`, `article_*`, `watchlist_*`) are gone.
+- Browser OAuth is the default for MCP clients (Path A); the API-key flow is kept for relayed chats and non-OAuth runtimes (Path B).
+- Nine data tools documented with when-to-use / not-for / cost: `ticker_lookup`, `list_tables`, `get_table_schema`, `fiscal_utility`, `run_sql`, `sec_report_list`, `sec_report_search`, `news_search`, `company_search`.
+- REST: points at the typed Public Data API v2 (`/api/v2`, OpenAPI at `/api/v2/openapi.json`) for scripts, with the `/api/v1/data/*` tool mirrors listed.
+- Coverage table: US, Japan, Hong Kong, China A-shares; US-only datasets called out; 24 alt-data categories.
+- Key URL is `https://drillr.ai/account/api-keys`.
+
+### Removed
+- `drillr-cli` instructions (the CLI is being reworked; the npm package predates the current API).
+
+### Added
+- `.claude-plugin/marketplace.json` so the repo installs as a Claude Code plugin marketplace and directories flag it "marketplace ready".
+- Example configs renamed to `drillr-data`; Claude Code example is OAuth-only.
+
 ## [1.0.0] — 2026-04-23
 
 Initial release. Complete rewrite of the earlier repository contents.
