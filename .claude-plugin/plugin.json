@@ -1,0 +1,12 @@
+{
+  "name": "drillr",
+  "version": "2.1.0",
+  "description": "Research US, China and Japan equities with Drillr financial data, original filings, company discovery and industry evidence.",
+  "author": {
+    "name": "Little Grebe Inc."
+  },
+  "homepage": "https://drillr.ai/docs",
+  "repository": "https://github.com/Little-Grebe-Inc/drillr-skill",
+  "license": "MIT",
+  "keywords": ["finance", "financial-data", "equity-research", "filings", "mcp"]
+}

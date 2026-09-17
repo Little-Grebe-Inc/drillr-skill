@@ -10,10 +10,26 @@ Any runtime that reads [Agent Skills](https://agentskills.io) can use it. Nothin
 
 ```bash
 npx skills add Little-Grebe-Inc/drillr-skill          # skills CLI: Claude Code, Codex, Cursor, Copilot, Gemini CLI, OpenClaw …
-/plugin marketplace add Little-Grebe-Inc/drillr-skill  # Claude Code, as a plugin; then /plugin install drillr
+/plugin marketplace add Little-Grebe-Inc/drillr-skill  # Claude Code; then /plugin install drillr@drillr-skill
 hermes skills tap add Little-Grebe-Inc/drillr-skill    # Hermes Agent
 git clone https://github.com/Little-Grebe-Inc/drillr-skill ~/.claude/skills/drillr   # by hand
 ```
+
+After installing the Claude plugin, open `/mcp`, select `drillr-data`, and complete
+browser sign-in. No API key is needed for this connection. Try: "Use Drillr to look
+up Apple's US ticker." The expected result is `AAPL`; this MCP lookup is free.
+Other data queries may consume Drillr credits.
+
+Validate or try a local checkout with Claude Code:
+
+```sh
+claude plugin validate .claude-plugin/plugin.json --strict
+claude plugin validate .claude-plugin/marketplace.json --strict
+claude --plugin-dir .
+```
+
+The repository supports direct installation. Listing in Claude's public community
+marketplace requires a separate [submission and review](https://platform.claude.com/plugins/submit).
 
 ## What drillr has
 
@@ -57,7 +73,9 @@ drillr-skill/
 │   └── mcp-supplement.md             # MCP tools, core SQL tables, ticker conventions, alt-data catalog
 ├── scripts/gen-reference.py          # regenerates reference/rest-endpoints.md from the live OpenAPI contract
 ├── examples/                         # MCP client configs (Claude Code OAuth; OpenClaw and Hermes with key) + onboarding prompts
+├── .claude-plugin/plugin.json        # Claude plugin metadata
 ├── .claude-plugin/marketplace.json   # lets the repo act as a Claude Code plugin marketplace
+├── .mcp.json                        # connects Claude to Drillr with browser OAuth
 ├── CHANGELOG.md
 └── LICENSE (MIT)
 ```

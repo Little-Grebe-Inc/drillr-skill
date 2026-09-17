@@ -1,6 +1,7 @@
 ---
 name: drillr
-description: Financial data and research API for US, China and Japan equities, built by drillr from primary filings (SEC EDGAR, cninfo, EDINET); every figure links to the passage it was filed in. 29 REST endpoints: ticker resolution, natural-language company discovery, filing lists and full-text filing search (EN/ZH/JA), the three statements as reported plus valuation metrics, earnings calendar and structured call summaries, US insider trades and 13F holdings, corporate-event timelines (financings, deals, executive changes, corporate actions, 13D/G stakes), executive rosters and pay, analyst ratings and consensus, and research signals (industry inflections, enterprise AI adoption, news storylines). Use whenever the user asks about a listed company's fundamentals, filings, earnings, ownership, events or analysts, wants companies by description, or follows market news. Handles API-key onboarding, then calls gateway.drillr.ai/api/v2; points MCP-capable clients at the MCP server.
+description: >-
+  Financial data and research API for US, China and Japan equities, built by drillr from primary filings (SEC EDGAR, cninfo, EDINET); every figure links to the passage it was filed in. 29 REST endpoints: ticker resolution, natural-language company discovery, filing lists and full-text filing search (EN/ZH/JA), the three statements as reported plus valuation metrics, earnings calendar and structured call summaries, US insider trades and 13F holdings, corporate-event timelines (financings, deals, executive changes, corporate actions, 13D/G stakes), executive rosters and pay, analyst ratings and consensus, and research signals (industry inflections, enterprise AI adoption, news storylines). Use whenever the user asks about a listed company's fundamentals, filings, earnings, ownership, events or analysts, wants companies by description, or follows market news. Handles API-key onboarding, then calls gateway.drillr.ai/api/v2; points MCP-capable clients at the MCP server.
 version: 2.1.0
 license: MIT
 homepage: https://drillr.ai
@@ -27,17 +28,30 @@ This skill works over **REST**, so it runs in any runtime that can make an HTTP 
 If your client speaks MCP, see [MCP instead of REST](#mcp-instead-of-rest) at the end:
 same data, browser sign-in, plus SQL and fact search.
 
-## Step 1 — Get a key (once)
+## Choose the connection
+
+When the Drillr MCP tools are available, use them directly. The Claude plugin bundles
+`drillr-data` in `.mcp.json`. In Claude Code, open `/mcp` and sign in to Drillr in the
+browser when prompted. Use the client-provided tool names and schemas, and follow
+`reference/mcp-supplement.md` for MCP research workflows. Do not request an API key
+when browser OAuth is available.
+
+For runtimes without MCP, or when the user specifically needs REST API access,
+follow the API-key setup below. REST calls and MCP data queries use the same credit
+wallet; respect the requested research scope and stop if credits are insufficient.
+
+## Step 1 — Get a key for REST (once)
 
 Tell the user:
 
 > To use drillr I need an API key. From any browser:
 > 1. Open https://drillr.ai/account/api-keys and sign in (Google is quickest; 80 free credits, no card).
 > 2. Create a key, scope **external**, name it e.g. "my-agent", copy the `drl_…` string.
-> 3. Paste it here — it is shown only once. Delete your message after I confirm it works.
+> 3. Save the key in your runtime's secret manager or set `DRILLR_API_KEY` locally.
+>    Do not paste it into the conversation. Tell me when it is configured.
 
-Store it where your runtime keeps secrets (`~/.config/drillr/config.json` with mode 0600,
-or the `DRILLR_API_KEY` environment variable), never in chat logs or files you commit. Verify:
+Use the configured `DRILLR_API_KEY` without displaying its value. Never print it,
+put it in a URL, or include it in committed files. Verify:
 
 ```bash
 curl -sS -H "X-API-KEY: $DRILLR_API_KEY" \
@@ -45,8 +59,9 @@ curl -sS -H "X-API-KEY: $DRILLR_API_KEY" \
 # → {"data":[{"ticker":"AAPL","market":"US","name":"Apple Inc.","exchange":"XNAS",...}]}
 ```
 
-Confirm to the user with the key masked (`drl_xxxxxxxx…e9f2`). On 401 re-read your stored
-key before asking for a new one. `Authorization: Bearer drl_…` is accepted as well.
+Confirm that the connection works without showing the key. On 401, ask the user to
+check their configured key; do not search other clients' credential files.
+`Authorization: Bearer drl_…` is accepted as well.
 
 ## Step 2 — Know the conventions
 
