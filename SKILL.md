@@ -1,7 +1,7 @@
 ---
 name: drillr
 description: >-
-  Financial data and research API for US, China and Japan equities, built by drillr from primary filings (SEC EDGAR, cninfo, EDINET); every figure links to the passage it was filed in. 29 REST endpoints: ticker resolution, natural-language company discovery, filing lists and full-text filing search (EN/ZH/JA), the three statements as reported plus valuation metrics, earnings calendar and structured call summaries, US insider trades and 13F holdings, corporate-event timelines (financings, deals, executive changes, corporate actions, 13D/G stakes), executive rosters and pay, analyst ratings and consensus, and research signals (industry inflections, enterprise AI adoption, news storylines). Use whenever the user asks about a listed company's fundamentals, filings, earnings, ownership, events or analysts, wants companies by description, or follows market news. Handles API-key onboarding, then calls gateway.drillr.ai/api/v2; points MCP-capable clients at the MCP server.
+  Financial data and research API for US, China and Japan equities, built by drillr from primary filings (SEC EDGAR, cninfo, EDINET); every figure links to the passage it was filed in. 29 REST endpoints: ticker resolution, natural-language company discovery, filing lists and full-text filing search (EN/ZH/JA), the three statements as reported plus valuation metrics, earnings calendar and structured call summaries, US insider trades and 13F holdings, corporate-event timelines (financings, deals, executive changes, corporate actions, 13D/G stakes), executive rosters and pay, analyst ratings and consensus, and research signals (industry inflections, enterprise AI adoption, news storylines). Use whenever the user asks about a listed company's fundamentals, filings, earnings, ownership, events or analysts, wants companies by description, or follows market news. Also use when asked to install or connect drillr MCP. MCP setup follows the official installation guide; REST uses API-key onboarding.
 version: 2.1.0
 license: MIT
 homepage: https://drillr.ai
@@ -24,27 +24,33 @@ figure links back to the document it came from.
 Docs: <https://drillr.ai/docs> · API reference: <https://drillr.ai/docs/api> ·
 OpenAPI: <https://gateway.drillr.ai/api/v2/openapi.json> · Pricing: <https://drillr.ai/pricing>
 
-This skill works over **REST**, so it runs in any runtime that can make an HTTP request.
-If your client speaks MCP, see [MCP instead of REST](#mcp-instead-of-rest) at the end:
-same data, browser sign-in, plus SQL and fact search.
+This skill supports MCP research tools and the REST API. Choose the connection
+before starting authentication.
 
 ## Choose the connection
 
-When the Drillr MCP tools are available, use them directly. The Claude plugin bundles
-`drillr-data` in `.mcp.json`. In Claude Code, open `/mcp` and sign in to Drillr in the
-browser when prompted. Use the client-provided tool names and schemas, and follow
-`reference/mcp-supplement.md` for MCP research workflows. Do not request an API key
-when browser OAuth is available.
+When asked to install, connect, or sign in to drillr MCP, read the
+[official installation guide](https://drillr.ai/developer/mcp-install.md) first.
+Use its instructions for the user's target app, including response language,
+authentication, and connection verification. If the guide cannot be retrieved,
+report that limitation rather than guessing client-specific setup steps.
+
+When the Drillr MCP tools are already available and authenticated, use them directly.
+The Claude plugin bundles `drillr-data` in `.mcp.json`. Use the client-provided tool
+names and schemas, and follow `reference/mcp-supplement.md` for MCP research workflows.
+For a missing or unauthenticated MCP connection, use the installation guide.
 
 For runtimes without MCP, or when the user specifically needs REST API access,
-follow the API-key setup below. REST calls and MCP data queries use the same credit
-wallet; respect the requested research scope and stop if credits are insufficient.
+follow the API-key setup below. For an MCP client without OAuth support, use the
+fallback in the installation guide. Do not request an API key for browser OAuth.
+REST calls and MCP data queries use the same credit wallet; respect the requested
+research scope and stop if credits are insufficient.
 
 ## Step 1 — Get a key for REST (once)
 
 Tell the user:
 
-> To use drillr I need an API key. From any browser:
+> For Drillr REST API access, configure an API key. From any browser:
 > 1. Open https://drillr.ai/account/api-keys and sign in (Google is quickest; 80 free credits, no card).
 > 2. Create a key, scope **external**, name it e.g. "my-agent", copy the `drl_…` string.
 > 3. Save the key in your runtime's secret manager or set `DRILLR_API_KEY` locally.
@@ -132,13 +138,13 @@ direction, degree and stage per company. `/enterprise-ai-adoption?ticker=…&sin
 
 ## MCP instead of REST
 
-If your client supports MCP (Claude Code, Codex, Cursor, VS Code, Claude Desktop), connect the
-server instead of using a key. Same data and credits, browser sign-in.
+For MCP setup in your app, use the [official installation guide](https://drillr.ai/developer/mcp-install.md).
+MCP and REST share the same data and credits. Browser OAuth is the default for MCP.
 
 - Server `drillr-data`, URL `https://gateway.drillr.ai/mcp/data`, Streamable HTTP, browser OAuth.
-- Setup per client: <https://drillr.ai/developer/mcp-install.md>. Tool pages: <https://drillr.ai/docs/mcp>.
+- Tool pages: <https://drillr.ai/docs/mcp>.
 - The server describes its own 10 tools, so nothing needs to be memorised here. Two things it has that REST does not: `run_sql` (read-only SQL over the core financial, price, earnings, ownership, analyst, event and executive tables, including HK and KR listings) and `filing_search` returning structured as-reported facts alongside passages. Details in `reference/mcp-supplement.md`.
-- Clients without OAuth can pass `"headers": {"Authorization": "Bearer drl_…"}` on the same URL (see `examples/`).
+- For clients without OAuth, use the guide's API-key fallback. The configs in `examples/` are reference formats for that fallback.
 
 ## Reference
 
