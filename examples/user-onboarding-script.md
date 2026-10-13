@@ -1,74 +1,31 @@
-# User-onboarding script templates
+# User onboarding
 
-Copy-paste-able prompts the agent can send to the user during key
-onboarding. Adapt freely; they're written to be polite, brief, and
-IM-friendly (short paragraphs, numbered steps).
+## Install or connect drillr MCP
 
----
+Read the [official installation guide](https://drillr.ai/developer/mcp-install.md)
+for the user's target app. Keep client-specific steps, response language, OAuth,
+and connection verification in that guide instead of copying them here.
 
-## Path A — Indirect (IM / web chat / phone user)
+The user can paste this into their agent:
 
-### First-time key request
+```text
+Please connect drillr MCP in this app using this installation guide: https://drillr.ai/developer/mcp-install.md. Walk me through sign-in and verify the connection.
+```
 
-> To use Drillr I need an API key. From any browser (your phone is
-> fine):
->
-> 1. Open https://drillr.ai/account/api-keys
-> 2. Sign in — **Google sign-in is the quickest**; email/password
->    also works
-> 3. Tap "Create API key" → name it (e.g. "my-agent") → copy the
->    `drl_...` string
-> 4. Paste it back to me here. The key is shown only once.
->
-> After I confirm it works, you can delete your message.
+A phone or chat interface alone does not determine whether its runtime supports
+OAuth. Use the guide's matching client section before choosing an API-key fallback.
 
-### Confirmation after storing (mask the key!)
+## REST API access
 
-> Stored `drl_xxxxxxxx_...e9f2`. You can safely delete your message
-> now.
+Use this flow when the user requests REST API access. For MCP without OAuth,
+use the fallback in the installation guide.
 
-### When the pasted key fails validation (401)
+> Open https://drillr.ai/account/api-keys and sign in. Create an external API key,
+> then save it in your runtime's secret manager or set `DRILLR_API_KEY` locally.
+> Do not paste the key into this conversation. Tell me when it is configured.
 
-> That key didn't work — I got a 401 from Drillr. It may have a
-> typo, or it may have already been revoked. Could you go back to
-> https://drillr.ai/account/api-keys, create a fresh one, and paste
-> it again?
+Use the configured key without displaying it. Verify REST access as described in
+`SKILL.md`. Confirm success only after that request succeeds.
 
-### When the key is revoked mid-session
-
-> Your Drillr API key was just revoked. To keep going, please
-> create a new one at https://drillr.ai/account/api-keys and paste
-> it here.
-
----
-
-## Path B — Direct (terminal co-located with user)
-
-### Claude Code MCP setup (browser sign-in, no key)
-
-> 1. Run `claude mcp add --scope user --transport http drillr-data https://gateway.drillr.ai/mcp/data`, or add this to `~/.claude.json` (or merge it into your existing
->    `mcpServers` object):
->
->    ```json
->    {
->      "mcpServers": {
->        "drillr-data": {
->          "type": "http",
->          "url": "https://gateway.drillr.ai/mcp/data"
->        }
->      }
->    }
->    ```
->
-> 2. Restart Claude Code, run `/mcp`, pick `drillr-data` → Authenticate,
->    and approve **drillr Data** in the browser.
-
-### REST / env-var setup
-
-> ```
-> export DRILLR_API_KEY=drl_...
-> ```
->
-> Then any HTTP call carries the header
-> `Authorization: Bearer $DRILLR_API_KEY` (or `X-API-KEY`).
-> Base URL for typed data: https://gateway.drillr.ai/api/v2 — see https://drillr.ai/docs/api
+If the request returns 401, ask the user to check or replace the key in the same
+secure storage. Do not ask them to send the key in chat.

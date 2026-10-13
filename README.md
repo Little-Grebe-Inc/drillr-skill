@@ -1,12 +1,24 @@
 # drillr-skill
 
 The agent skill for [drillr](https://drillr.ai), a financial data and research API for
-the US, China and Japan. `SKILL.md` teaches an agent how to get an API key, call the
-REST API well, and, where the client supports it, connect the MCP server instead.
+the US, China and Japan. `SKILL.md` routes MCP installation to the official guide
+and teaches research workflows over MCP or the REST API. REST uses an API key.
 
 Any runtime that reads [Agent Skills](https://agentskills.io) can use it. Nothing to build.
 
-## Install
+## Install drillr MCP
+
+To install or connect drillr MCP, read the [official installation guide](https://drillr.ai/developer/mcp-install.md).
+Paste this into the app where you want to use drillr:
+
+```text
+Please connect drillr MCP in this app using this installation guide: https://drillr.ai/developer/mcp-install.md. Walk me through sign-in and verify the connection.
+```
+
+The guide covers setup, browser OAuth sign-in, and verification for your app.
+Installing this skill is optional for connecting the MCP server.
+
+## Install the skill
 
 ```bash
 npx skills add Little-Grebe-Inc/drillr-skill          # skills CLI: Claude Code, Codex, Cursor, Copilot, Gemini CLI, OpenClaw …
@@ -15,10 +27,8 @@ hermes skills tap add Little-Grebe-Inc/drillr-skill    # Hermes Agent
 git clone https://github.com/Little-Grebe-Inc/drillr-skill ~/.claude/skills/drillr   # by hand
 ```
 
-After installing the Claude plugin, open `/mcp`, select `drillr-data`, and complete
-browser sign-in. No API key is needed for this connection. Try: "Use Drillr to look
-up Apple's US ticker." The expected result is `AAPL`; this MCP lookup is free.
-Other data queries may consume Drillr credits.
+The Claude plugin bundles the `drillr-data` MCP connection. After installation,
+use the official guide to complete sign-in and verify the connection in Claude Code.
 
 Validate or try a local checkout with Claude Code:
 

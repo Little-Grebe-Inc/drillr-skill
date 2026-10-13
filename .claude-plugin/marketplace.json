@@ -3,7 +3,7 @@
   "owner": {
     "name": "Little Grebe Inc."
   },
-  "description": "The drillr agent skill: API-key onboarding and guidance for drillr's financial data and research API (US, China, Japan) — filings, statements, earnings, ownership, events, executives, analyst data, company discovery and research signals — with a pointer to the MCP server.",
+  "description": "The drillr agent skill: MCP setup through the official installation guide, REST API-key onboarding, and financial research workflows for US, China and Japan equities.",
   "plugins": [
     {
       "name": "drillr",
